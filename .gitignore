@@ -11,3 +11,5 @@ data/
 *.yaml
 *.png
 *.html
+.*.swp
+.*.swo
