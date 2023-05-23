@@ -16,13 +16,14 @@ from mtr.config import cfg
 
 
 class WaymoDataset(DatasetTemplate):
-    def __init__(self, dataset_cfg, training=True, logger=None):
+    def __init__(self, dataset_cfg, training=True, logger=None, no_disk=False):
         super().__init__(dataset_cfg=dataset_cfg, training=training, logger=logger)
         self.data_root = cfg.ROOT_DIR / self.dataset_cfg.DATA_ROOT
         self.data_path = self.data_root / self.dataset_cfg.SPLIT_DIR[self.mode]
 
-        self.infos = self.get_all_infos(self.data_root / self.dataset_cfg.INFO_FILE[self.mode])
-        self.logger.info(f'Total scenes after filters: {len(self.infos)}')
+        if not no_disk:
+            self.infos = self.get_all_infos(self.data_root / self.dataset_cfg.INFO_FILE[self.mode])
+            self.logger.info(f'Total scenes after filters: {len(self.infos)}')
 
     def get_all_infos(self, info_path):
         self.logger.info(f'Start to load infos from {info_path}')
@@ -81,7 +82,9 @@ class WaymoDataset(DatasetTemplate):
         scene_id = info['scenario_id']
         with open(self.data_path / f'sample_{scene_id}.pkl', 'rb') as f:
             info = pickle.load(f)
+        return self.create_input_dict_from_info(info, scene_id)
 
+    def create_input_dict_from_info(self, info, scene_id):
         sdc_track_index = info['sdc_track_index']
         current_time_index = info['current_time_index']
         timestamps = np.array(info['timestamps_seconds'][:current_time_index + 1], dtype=np.float32)
@@ -132,19 +135,18 @@ class WaymoDataset(DatasetTemplate):
             'center_gt_trajs_src': obj_trajs_full[track_index_to_predict]
         }
 
-        if not self.dataset_cfg.get('WITHOUT_HDMAP', False):
-            if info['map_infos']['all_polylines'].__len__() == 0:
-                info['map_infos']['all_polylines'] = np.zeros((2, 7), dtype=np.float32)
-                print(f'Warning: empty HDMap {scene_id}')
+        if info['map_infos']['all_polylines'].__len__() == 0:
+            info['map_infos']['all_polylines'] = np.zeros((2, 7), dtype=np.float32)
+            print(f'Warning: empty HDMap {scene_id}')
 
-            map_polylines_data, map_polylines_mask, map_polylines_center = self.create_map_data_for_center_objects(
-                center_objects=center_objects, map_infos=info['map_infos'],
-                center_offset=self.dataset_cfg.get('CENTER_OFFSET_OF_MAP', (30.0, 0)),
-            )   # (num_center_objects, num_topk_polylines, num_points_each_polyline, 9), (num_center_objects, num_topk_polylines, num_points_each_polyline)
+        map_polylines_data, map_polylines_mask, map_polylines_center = self.create_map_data_for_center_objects(
+            center_objects=center_objects, map_infos=info['map_infos'],
+            center_offset=self.dataset_cfg.get('CENTER_OFFSET_OF_MAP', (30.0, 0)),
+        )   # (num_center_objects, num_topk_polylines, num_points_each_polyline, 9), (num_center_objects, num_topk_polylines, num_points_each_polyline)
 
-            ret_dict['map_polylines'] = map_polylines_data
-            ret_dict['map_polylines_mask'] = (map_polylines_mask > 0)
-            ret_dict['map_polylines_center'] = map_polylines_center
+        ret_dict['map_polylines'] = map_polylines_data
+        ret_dict['map_polylines_mask'] = (map_polylines_mask > 0)
+        ret_dict['map_polylines_center'] = map_polylines_center
 
         return ret_dict
 
