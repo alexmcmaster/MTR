@@ -12,7 +12,7 @@ import multiprocessing
 import glob
 from tqdm import tqdm
 from waymo_open_dataset.protos import scenario_pb2
-from waymo_types import object_type, lane_type, road_line_type, road_edge_type, signal_state, polyline_type
+from .waymo_types import object_type, lane_type, road_line_type, road_edge_type, signal_state, polyline_type
 
     
 def decode_tracks_from_proto(tracks):

@@ -13,3 +13,4 @@ data/
 *.html
 .*.swp
 .*.swo
+version.py
