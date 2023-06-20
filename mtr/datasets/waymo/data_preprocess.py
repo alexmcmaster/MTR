@@ -167,13 +167,20 @@ def decode_dynamic_map_states_from_proto(dynamic_map_states):
     return dynamic_map_infos
 
 
-def process_waymo_data_with_scenario_proto(data_file, output_path=None):
-    dataset = tf.data.TFRecordDataset(data_file, compression_type='')
+def process_waymo_data_with_scenario_proto(data_file, output_path=None, tfrecord=True):
+    if tfrecord:
+        dataset = tf.data.TFRecordDataset(data_file, compression_type='')
+    else:
+        with open(data_file, "rb") as f:
+            dataset = pickle.load(f)
     ret_infos = []
     for cnt, data in enumerate(dataset):
         info = {}
         scenario = scenario_pb2.Scenario()
-        scenario.ParseFromString(bytearray(data.numpy()))
+        if tfrecord:
+            scenario.ParseFromString(bytearray(data.numpy()))
+        else:
+            scenario.ParseFromString(data)
 
         info['scenario_id'] = scenario.scenario_id
         info['timestamps_seconds'] = list(scenario.timestamps_seconds)  # list of int of shape (91)
@@ -213,12 +220,17 @@ def get_infos_from_protos(data_path, output_path=None, num_workers=8):
     if output_path is not None:
         os.makedirs(output_path, exist_ok=True)
 
-    func = partial(
-        process_waymo_data_with_scenario_proto, output_path=output_path
-    )
-
     src_files = glob.glob(os.path.join(data_path, '*.tfrecord*'))
     src_files.sort()
+    tfrecord = True
+    if len(src_files) == 0:
+        src_files = glob.glob(os.path.join(data_path, '*.scenarios*'))
+        src_files.sort()
+        tfrecord = False
+
+    func = partial(
+        process_waymo_data_with_scenario_proto, output_path=output_path, tfrecord=tfrecord
+    )
 
     # func(src_files[0])
     #with multiprocessing.Pool(num_workers) as p:
