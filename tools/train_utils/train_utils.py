@@ -33,6 +33,10 @@ def train_one_epoch(model, optimizer, train_loader, accumulated_iter, optim_cfg,
             batch = next(dataloader_iter)
             print('new iters')
 
+        if min(batch["batch_sample_count"]) < 2:
+            print("SKIPPING")
+            continue
+
         if scheduler is not None:
             try:
                 scheduler.step(accumulated_iter)
