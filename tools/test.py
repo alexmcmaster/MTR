@@ -44,6 +44,7 @@ def parse_config():
     parser.add_argument('--eval_all', action='store_true', default=False, help='whether to evaluate all checkpoints')
     parser.add_argument('--ckpt_dir', type=str, default=None, help='specify a ckpt directory to be evaluated if needed')
     parser.add_argument('--save_to_file', action='store_true', default=False, help='')
+    parser.add_argument('--val', action='store_true', default=False, help='')
 
     args = parser.parse_args()
 
@@ -199,7 +200,8 @@ def main():
     test_set, test_loader, sampler = build_dataloader(
         dataset_cfg=cfg.DATA_CONFIG,
         batch_size=args.batch_size,
-        dist=dist_test, workers=args.workers, logger=logger, training=False
+        dist=dist_test, workers=args.workers, logger=logger, training=False,
+        testing=not args.val
     )
     model = model_utils.MotionTransformer(config=cfg.MODEL)
     with torch.no_grad():
