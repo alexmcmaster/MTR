@@ -177,7 +177,7 @@ def process_waymo_data_with_scenario_proto(data_file, output_path=None, tfrecord
         with open(data_file, "rb") as f:
             dataset = pickle.load(f)
     ret_infos = []
-    for cnt, data in enumerate(dataset):
+    for cnt, data in tqdm(enumerate(dataset)):
         info = {}
         scenario = scenario_pb2.Scenario()
         if tfrecord:
@@ -195,6 +195,8 @@ def process_waymo_data_with_scenario_proto(data_file, output_path=None, tfrecord
             'track_index': [cur_pred.track_index for cur_pred in scenario.tracks_to_predict],
             'difficulty': [cur_pred.difficulty for cur_pred in scenario.tracks_to_predict]
         }  # for training: suggestion of objects to train on, for val/test: need to be predicted
+        if len(info["tracks_to_predict"]["track_index"]) < 2:
+            continue
 
         track_infos = decode_tracks_from_proto(scenario.tracks)
         info['tracks_to_predict']['object_type'] = [track_infos['object_type'][cur_idx] for cur_idx in info['tracks_to_predict']['track_index']]

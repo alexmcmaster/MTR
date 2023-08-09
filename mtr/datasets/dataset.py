@@ -11,15 +11,24 @@ import mtr.utils.common_utils as common_utils
 
 
 class DatasetTemplate(torch_data.Dataset):
-    def __init__(self, dataset_cfg=None, training=True, logger=None):
+    def __init__(self, dataset_cfg=None, training=True, testing=False, logger=None):
         super().__init__()
         self.dataset_cfg = dataset_cfg
         self.training = training
+        self.testing = testing
+        if self.training and self.testing:
+            raise ValueError("Dataset can't be for both training and testing")
         self.logger = logger
 
     @property
     def mode(self):
-        return 'train' if self.training else 'test'
+        #return 'train' if self.training else 'test'
+        if self.training:
+            return 'train'
+        elif self.testing:
+            return 'test'
+        else:
+            return 'val'
 
     def merge_all_iters_to_one_epoch(self, merge=True, epochs=None):
         if merge:
