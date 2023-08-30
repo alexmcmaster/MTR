@@ -77,7 +77,78 @@ class MTRDecoder(nn.Module):
             in_channels=self.d_model, hidden_size=self.d_model, num_decoder_layers=self.num_decoder_layers
         )
 
+        self.adapter_layers = None
+
         self.forward_ret_dict = {}
+
+    def add_adapter_layers(self, n_layers):
+        # append to self.obj_decoder_layers
+        obj_decoder_layer = transformer_decoder_layer.TransformerDecoderLayer(
+            d_model=self.d_model, nhead=self.model_cfg.NUM_ATTN_HEAD,
+            dim_feedforward=self.d_model * 4,
+            dropout=self.model_cfg.get('DROPOUT_OF_ATTN', 0.1),
+            activation="relu", normalize_before=False, keep_query_pos=False,
+            rm_self_attn_decoder=False, use_local_attn=False
+        )
+        new_obj_decoder_layers = nn.ModuleList([copy.deepcopy(obj_decoder_layer).to("cuda")\
+                for _ in range(n_layers)]) 
+        for param in new_obj_decoder_layers.parameters():
+            param.requires_grad = True
+        self.obj_decoder_layers.extend(new_obj_decoder_layers)
+        # append to self.map_decoder_layers
+        map_d_model = self.model_cfg.get('MAP_D_MODEL', self.d_model)
+        map_decoder_layer = transformer_decoder_layer.TransformerDecoderLayer(
+            d_model=map_d_model, nhead=self.model_cfg.NUM_ATTN_HEAD,
+            dim_feedforward=self.d_model * 4,
+            dropout=self.model_cfg.get('DROPOUT_OF_ATTN', 0.1),
+            activation="relu", normalize_before=False, keep_query_pos=False,
+            rm_self_attn_decoder=False, use_local_attn=True
+        )
+        new_map_decoder_layers = nn.ModuleList([copy.deepcopy(map_decoder_layer).to("cuda")\
+                for _ in range(n_layers)])
+        for param in new_map_decoder_layers.parameters():
+            param.requires_grad = True
+        self.map_decoder_layers.extend(new_map_decoder_layers)
+        # account for map_d_model != self.d_model
+        map_query_content_mlp = nn.Linear(self.d_model, map_d_model)
+        new_map_query_content_mlps = nn.ModuleList([copy.deepcopy(map_query_content_mlp).to("cuda")\
+                for _ in range(n_layers)])
+        for param in new_map_query_content_mlps.parameters():
+            param.requires_grad = True
+        self.map_query_content_mlps.extend(new_map_query_content_mlps)
+        # append to self.query_feature_fusion_layers
+        query_feature_fusion_layer = common_layers.build_mlps(
+                c_in=self.d_model * 2 + map_d_model,
+                mlp_channels=[self.d_model, self.d_model],
+                ret_before_act=True
+        )
+        new_query_feature_fusion_layers = nn.ModuleList(
+                [copy.deepcopy(query_feature_fusion_layer).to("cuda") for _ in range(n_layers)])
+        for param in new_query_feature_fusion_layers.parameters():
+            param.requires_grad = True
+        self.query_feature_fusion_layers.extend(new_query_feature_fusion_layers)
+        # TODO: append to self.motion_reg_heads, self.motion_cls_heads
+        motion_reg_head =  common_layers.build_mlps(
+            c_in=self.d_model,
+            mlp_channels=[self.d_model, self.d_model, self.num_future_frames * 7],
+            ret_before_act=True
+        )
+        motion_cls_head =  common_layers.build_mlps(
+            c_in=self.d_model,
+            mlp_channels=[self.d_model, self.d_model, 1],
+            ret_before_act=True
+        )
+        new_motion_reg_heads = nn.ModuleList([copy.deepcopy(motion_reg_head).to("cuda")\
+                for _ in range(n_layers)])
+        for param in new_motion_reg_heads.parameters():
+            param.requires_grad = True
+        self.motion_reg_heads.extend(new_motion_reg_heads)
+        new_motion_cls_heads = nn.ModuleList([copy.deepcopy(motion_cls_head).to("cuda")\
+                for _ in range(n_layers)])
+        for param in new_motion_cls_heads.parameters():
+            param.requires_grad = True
+        self.motion_cls_heads.extend(new_motion_cls_heads)
+        self.num_decoder_layers += n_layers
 
     def build_dense_future_prediction_layers(self, hidden_dim, num_future_frames):
         self.obj_pos_encoding_layer = common_layers.build_mlps(
@@ -346,6 +417,9 @@ class MTRDecoder(nn.Module):
 
             # motion prediction
             query_content_t = query_content.permute(1, 0, 2).contiguous().view(num_center_objects * num_query, -1)
+            #if layer_idx == self.num_decoder_layers - 1 and self.adapter_layers is not None:
+                #query_content_t = self.adapter_layers[layer_idx](query_content_t)
+            #    query_content_t = self.adapter_layers(query_content_t)
             pred_scores = self.motion_cls_heads[layer_idx](query_content_t).view(num_center_objects, num_query)
             if self.motion_vel_heads is not None:
                 pred_trajs = self.motion_reg_heads[layer_idx](query_content_t).view(num_center_objects, num_query, self.num_future_frames, 5)
@@ -353,6 +427,10 @@ class MTRDecoder(nn.Module):
                 pred_trajs = torch.cat((pred_trajs, pred_vel), dim=-1)
             else:
                 pred_trajs = self.motion_reg_heads[layer_idx](query_content_t).view(num_center_objects, num_query, self.num_future_frames, 7)
+
+            #if self.adapter_layers is not None:
+            #    print(pred_trajs.shape)
+            #    pred_trajs = self.adapter_layers(pred_trajs)
 
             pred_list.append([pred_scores, pred_trajs])
 

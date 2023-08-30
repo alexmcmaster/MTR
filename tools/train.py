@@ -53,6 +53,7 @@ def parse_config():
     parser.add_argument('--ckpt_save_time_interval', type=int, default=300, help='in terms of seconds')
 
     parser.add_argument('--add_worker_init_fn', action='store_true', default=False, help='')
+    parser.add_argument('--adapter_layers', type=int, default=0, help='')
     args = parser.parse_args()
 
     cfg_from_yaml_file(args.cfg_file, cfg)
@@ -178,6 +179,9 @@ def main():
 
     if args.pretrained_model is not None:
         model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist_train, logger=logger)
+        if args.adapter_layers > 0:
+            model.freeze()
+            model.add_adapter_layers(args.adapter_layers)
 
     if args.ckpt is not None:
         it, start_epoch = model.load_params_with_optimizer(args.ckpt, to_cpu=dist_train, optimizer=optimizer,

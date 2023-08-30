@@ -49,7 +49,12 @@ def train_one_epoch(model, optimizer, train_loader, accumulated_iter, optim_cfg,
         if optimizer_2 is not None:
             optimizer_2.zero_grad()
 
-        loss, tb_dict, disp_dict = model(batch)
+        try:
+            loss, tb_dict, disp_dict = model(batch)
+        except:
+            #print(batch)
+            #continue
+            raise
 
         loss.backward()
 

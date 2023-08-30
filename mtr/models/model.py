@@ -24,6 +24,13 @@ class MotionTransformer(nn.Module):
             config=self.model_cfg.MOTION_DECODER
         )
 
+    def freeze(self):
+        for param in self.parameters():
+            param.requires_grad = False
+
+    def add_adapter_layers(self, n_layers):
+        self.motion_decoder.add_adapter_layers(n_layers)
+
     def forward(self, batch_dict):
         batch_dict = self.context_encoder(batch_dict)
         batch_dict = self.motion_decoder(batch_dict)
