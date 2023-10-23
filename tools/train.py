@@ -34,6 +34,9 @@ def parse_config():
     parser.add_argument('--extra_tag', type=str, default='default', help='extra tag for this experiment')
     parser.add_argument('--ckpt', type=str, default=None, help='checkpoint to start from')
     parser.add_argument('--pretrained_model', type=str, default=None, help='pretrained_model')
+    parser.add_argument('--freeze_encoder', action='store_true', help='')
+    parser.add_argument('--freeze_decoder', action='store_true', help='')
+    parser.add_argument('--finetune_output', action='store_true', help='fine tune last decoder stage only')
     parser.add_argument('--launcher', choices=['none', 'pytorch', 'slurm'], default='none')
     parser.add_argument('--tcp_port', type=int, default=18888, help='tcp port for distrbuted training')
     parser.add_argument('--without_sync_bn', action='store_true', default=False, help='whether to use sync bn')
@@ -105,6 +108,12 @@ def build_scheduler(optimizer, dataloader, opt_cfg, total_epochs, total_iters_ea
         scheduler = None
 
     return scheduler
+
+def count_params(model):
+    trainable_params = filter(lambda p: p.requires_grad, model.parameters())
+    trainable = sum(p.numel() for p in trainable_params)
+    total = sum(p.numel() for p in model.parameters())
+    return total, trainable
 
 
 def main():
@@ -178,6 +187,29 @@ def main():
 
     if args.pretrained_model is not None:
         model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist_train, logger=logger)
+    print("\n\n\n\n\n\n\n\n")
+    if args.freeze_encoder:
+        for name, param in model.context_encoder.named_parameters():
+            print(f"Freezing {name}")
+            param.requires_grad = False
+    if args.freeze_decoder:
+        for name, param in model.motion_decoder.named_parameters():
+            print(f"Freezing {name}")
+            param.requires_grad = False
+    if args.finetune_output:
+        for name, param in model.named_parameters():
+            print(f"Freezing {name}")
+            param.requires_grad = False
+        for name, param in model.motion_decoder.motion_reg_heads[-1].named_parameters():
+            print(f"Unfreezing {name}")
+            param.requires_grad = True
+        for name, param in model.motion_decoder.motion_cls_heads[-1].named_parameters():
+            print(f"Unfreezing {name}")
+            param.requires_grad = True
+
+    total, trainable = count_params(model)
+    print(f"Model has {total} parameters, {trainable} of which are trainable.")
+    print("\n\n\n\n\n\n\n\n")
 
     if args.ckpt is not None:
         it, start_epoch = model.load_params_with_optimizer(args.ckpt, to_cpu=dist_train, optimizer=optimizer,
